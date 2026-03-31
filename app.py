@@ -19,52 +19,49 @@ if "theme_mode" not in st.session_state:
 if "history" not in st.session_state:
     st.session_state.history = []
 
+if "agent_histories" not in st.session_state:
+    st.session_state.agent_histories = {
+        "Reflective": [],
+        "Multi-Agent": [],
+        "Tree-of-Thoughts": []
+    }
+
+if "last_results" not in st.session_state:
+    st.session_state.last_results = {}
+
+if "selected_agent" not in st.session_state:
+    st.session_state.selected_agent = "Reflective"
+
+if "comparison_df" not in st.session_state:
+    st.session_state.comparison_df = None
+
+if "outputs_for_pdf" not in st.session_state:
+    st.session_state.outputs_for_pdf = {}
+
 # ---------------------------
 # Toggle CSS
 # ---------------------------
-st.markdown("""
-<style>
+st.markdown(
+    """
+    <style>
+    [data-testid="stToggle"] {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 0.2rem;
+    }
 
-/* toggle container */
-[data-testid="stToggle"] {
-    display: flex;
-    justify-content: flex-end;
-}
+    [data-testid="stToggle"] label p {
+        font-weight: 600 !important;
+    }
 
-/* toggle track */
-[data-testid="stToggle"] label div {
-    width: 70px !important;
-    height: 36px !important;
-    border-radius: 999px !important;
-    background: #cbd5e1 !important;
-    transition: all 0.25s ease !important;
-}
-
-/* toggle circle */
-[data-testid="stToggle"] label div:before {
-    width: 28px !important;
-    height: 28px !important;
-    border-radius: 50% !important;
-    top: 4px !important;
-    left: 5px !important;
-    background: white !important;
-    transition: all 0.25s ease !important;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-}
-
-/* checked state (mavi) */
-[data-testid="stToggle"] input:checked + div {
-    background: linear-gradient(135deg,#3b82f6,#2563eb) !important;
-}
-
-/* checked circle move */
-[data-testid="stToggle"] input:checked + div:before {
-    transform: translateX(32px);
-}
-
-</style>
-""", 
-unsafe_allow_html=True
+    .custom-card {
+        border-radius: 18px;
+        padding: 22px;
+        margin-bottom: 18px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 # ---------------------------
@@ -75,10 +72,7 @@ top_left, top_right = st.columns([6, 2])
 with top_right:
     dark_mode = st.toggle("Dark Mode", value=st.session_state.theme_mode == "Dark")
 
-if dark_mode:
-    st.session_state.theme_mode = "Dark"
-else:
-    st.session_state.theme_mode = "Light"
+st.session_state.theme_mode = "Dark" if dark_mode else "Light"
 
 # ---------------------------
 # Theme CSS
@@ -104,8 +98,12 @@ if st.session_state.theme_mode == "Dark":
             padding-top: 2rem;
         }
 
-        h1, h2, h3, h4, h5, h6, p, label, div, span {
+        h1, h2, h3, h4, h5, h6 {
             color: #f8fafc !important;
+        }
+
+        p, label {
+            color: #e5e7eb !important;
         }
 
         .stTextArea textarea {
@@ -113,6 +111,13 @@ if st.session_state.theme_mode == "Dark":
             color: #f8fafc !important;
             border: 1px solid #334155 !important;
             border-radius: 14px !important;
+        }
+
+        .stTextInput input {
+            background-color: #1e293b !important;
+            color: #f8fafc !important;
+            border: 1px solid #334155 !important;
+            border-radius: 12px !important;
         }
 
         div[data-baseweb="select"] > div {
@@ -164,9 +169,11 @@ if st.session_state.theme_mode == "Dark":
         .custom-card {
             background: rgba(22, 36, 61, 0.9);
             border: 1px solid #334155;
-            border-radius: 18px;
-            padding: 22px;
-            margin-bottom: 18px;
+        }
+
+        [data-testid="stToolbar"] * {
+            color: #f8fafc !important;
+            fill: #f8fafc !important;
         }
         </style>
         """,
@@ -193,8 +200,12 @@ else:
             padding-top: 2rem;
         }
 
-        h1, h2, h3, h4, h5, h6, p, label, div, span {
+        h1, h2, h3, h4, h5, h6 {
             color: #0f172a !important;
+        }
+
+        p, label {
+            color: #1e293b !important;
         }
 
         .stTextArea textarea {
@@ -202,6 +213,13 @@ else:
             color: #0f172a !important;
             border: 1px solid #cbd5e1 !important;
             border-radius: 14px !important;
+        }
+
+        .stTextInput input {
+            background-color: white !important;
+            color: #0f172a !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 12px !important;
         }
 
         div[data-baseweb="select"] > div {
@@ -251,11 +269,13 @@ else:
         }
 
         .custom-card {
-            background: rgba(255,255,255,0.9);
+            background: rgba(255,255,255,0.95);
             border: 1px solid #cbd5e1;
-            border-radius: 18px;
-            padding: 22px;
-            margin-bottom: 18px;
+        }
+
+        [data-testid="stToolbar"] * {
+            color: #0f172a !important;
+            fill: #0f172a !important;
         }
         </style>
         """,
@@ -266,19 +286,84 @@ else:
 # Header
 # ---------------------------
 st.markdown(
-    """
+    f"""
     <div class="custom-card">
         <h1 style="margin-bottom:0.4rem;">🤖 Agentic AI Comparison Dashboard</h1>
         <p style="font-size:1.05rem; margin-bottom:0.3rem;">
             Compare Reflective, Multi-Agent and Tree-of-Thoughts reasoning strategies
         </p>
         <p style="opacity:0.8; margin-top:0.2rem;">
-            Current Theme: <b>{}</b>
+            Current Theme: <b>{st.session_state.theme_mode}</b>
         </p>
     </div>
-    """.format(st.session_state.theme_mode),
+    """,
     unsafe_allow_html=True
 )
+
+# ---------------------------
+# Helper functions
+# ---------------------------
+def get_reflective_agent(llm):
+    return ReflectiveAgent(llm)
+
+def get_multi_agent(llm):
+    planner = SimpleAgent(llm, "Planner")
+    critic = SimpleAgent(llm, "Critic")
+    optimizer = SimpleAgent(llm, "Optimizer")
+    return MultiAgentSystem(planner, critic, optimizer)
+
+def get_tot_agent(llm):
+    return TreeOfThoughtAgent(llm, branches=3)
+
+def run_reflective(llm, task):
+    reflective = get_reflective_agent(llm)
+    with Timer() as t:
+        out = reflective.run(task)
+    return out, t.elapsed_ms
+
+def run_multi(llm, task):
+    multi = get_multi_agent(llm)
+    with Timer() as t:
+        out = multi.run(task)
+    return out, t.elapsed_ms
+
+def run_tot(llm, task):
+    tot = get_tot_agent(llm)
+    with Timer() as t:
+        out = tot.run(task)
+    return out, t.elapsed_ms
+
+def build_agent_context(agent_name: str, new_user_message: str) -> str:
+    history = st.session_state.agent_histories[agent_name]
+
+    if not history:
+        return new_user_message
+
+    transcript_parts = []
+    for item in history:
+        transcript_parts.append(f"User: {item['user']}")
+        transcript_parts.append(f"Assistant: {item['assistant']}")
+
+    transcript_parts.append(f"User: {new_user_message}")
+    transcript_parts.append("Continue the conversation consistently and answer the user's latest message.")
+    return "\n".join(transcript_parts)
+
+def continue_with_agent(llm, agent_name: str, user_message: str):
+    prompt = build_agent_context(agent_name, user_message)
+
+    if agent_name == "Reflective":
+        out, elapsed = run_reflective(llm, prompt)
+    elif agent_name == "Multi-Agent":
+        out, elapsed = run_multi(llm, prompt)
+    else:
+        out, elapsed = run_tot(llm, prompt)
+
+    st.session_state.agent_histories[agent_name].append({
+        "user": user_message,
+        "assistant": out.final_text
+    })
+
+    return out, elapsed
 
 # ---------------------------
 # Inputs
@@ -294,40 +379,17 @@ model_choice = st.selectbox(
     ["Compare All", "Reflective Only", "Multi-Agent Only", "Tree-of-Thoughts Only"]
 )
 
-run_button = st.button("Run")
+run_button = st.button("Run Comparison")
 
 # ---------------------------
-# Helper functions
-# ---------------------------
-def run_reflective(llm, task):
-    reflective = ReflectiveAgent(llm)
-    with Timer() as t:
-        out = reflective.run(task)
-    return out, t.elapsed_ms
-
-def run_multi(llm, task):
-    planner = SimpleAgent(llm, "Planner")
-    critic = SimpleAgent(llm, "Critic")
-    optimizer = SimpleAgent(llm, "Optimizer")
-    multi = MultiAgentSystem(planner, critic, optimizer)
-    with Timer() as t:
-        out = multi.run(task)
-    return out, t.elapsed_ms
-
-def run_tot(llm, task):
-    tot = TreeOfThoughtAgent(llm, branches=3)
-    with Timer() as t:
-        out = tot.run(task)
-    return out, t.elapsed_ms
-
-# ---------------------------
-# Main run
+# Main comparison run
 # ---------------------------
 if run_button:
     llm = OpenAILLM(model="gpt-4.1-mini")
 
     results = []
     outputs_for_pdf = {}
+    last_results = {}
 
     if model_choice in ["Compare All", "Reflective Only"]:
         with st.spinner("Running Reflective..."):
@@ -343,6 +405,11 @@ if run_button:
                 "output_chars": len(r_out.final_text),
                 "llm_calls": r_out.llm_calls
             }
+            last_results["Reflective"] = r_out.final_text
+
+            st.session_state.agent_histories["Reflective"] = [
+                {"user": task, "assistant": r_out.final_text}
+            ]
 
     if model_choice in ["Compare All", "Multi-Agent Only"]:
         with st.spinner("Running Multi-Agent..."):
@@ -358,6 +425,11 @@ if run_button:
                 "output_chars": len(m_out.final_text),
                 "llm_calls": m_out.llm_calls
             }
+            last_results["Multi-Agent"] = m_out.final_text
+
+            st.session_state.agent_histories["Multi-Agent"] = [
+                {"user": task, "assistant": m_out.final_text}
+            ]
 
     if model_choice in ["Compare All", "Tree-of-Thoughts Only"]:
         with st.spinner("Running Tree-of-Thoughts..."):
@@ -373,26 +445,39 @@ if run_button:
                 "output_chars": len(t_out.final_text),
                 "llm_calls": t_out.llm_calls
             }
+            last_results["Tree-of-Thoughts"] = t_out.final_text
+
+            st.session_state.agent_histories["Tree-of-Thoughts"] = [
+                {"user": task, "assistant": t_out.final_text}
+            ]
 
     st.session_state.history.append(task)
+    st.session_state.last_results = last_results
+    st.session_state.comparison_df = pd.DataFrame(results)
+    st.session_state.outputs_for_pdf = outputs_for_pdf
 
+# ---------------------------
+# Show outputs and comparison if available
+# ---------------------------
+if st.session_state.last_results:
     st.subheader("Outputs")
 
-    if "r_out" in locals():
+    if "Reflective" in st.session_state.last_results:
         with st.expander("Reflective Output", expanded=False):
-            st.write(r_out.final_text)
+            st.write(st.session_state.last_results["Reflective"])
 
-    if "m_out" in locals():
+    if "Multi-Agent" in st.session_state.last_results:
         with st.expander("Multi-Agent Output", expanded=False):
-            st.write(m_out.final_text)
+            st.write(st.session_state.last_results["Multi-Agent"])
 
-    if "t_out" in locals():
+    if "Tree-of-Thoughts" in st.session_state.last_results:
         with st.expander("Tree-of-Thoughts Output", expanded=False):
-            st.write(t_out.final_text)
+            st.write(st.session_state.last_results["Tree-of-Thoughts"])
+
+if st.session_state.comparison_df is not None and not st.session_state.comparison_df.empty:
+    df = st.session_state.comparison_df
 
     st.subheader("Comparison Metrics")
-
-    df = pd.DataFrame(results)
     st.dataframe(df, use_container_width=True)
 
     st.subheader("Model Overview")
@@ -434,21 +519,19 @@ if run_button:
     with c2:
         st.info(f"🧠 Most Detailed Model: {longest['Model']} ({longest['Output Length']} chars)")
 
-    if not df.empty:
-        st.subheader("Charts")
+    st.subheader("Charts")
+    chart_df = df.set_index("Model")[[
+        "Execution Time (ms)",
+        "Output Length",
+        "LLM Calls"
+    ]].copy()
 
-        chart_df = df.set_index("Model")[[
-            "Execution Time (ms)",
-            "Output Length",
-            "LLM Calls"
-        ]].copy()
+    for col in chart_df.columns:
+        max_val = chart_df[col].max()
+        if max_val != 0:
+            chart_df[col] = chart_df[col] / max_val
 
-        for col in chart_df.columns:
-            max_val = chart_df[col].max()
-            if max_val != 0:
-                chart_df[col] = chart_df[col] / max_val
-
-        st.bar_chart(chart_df)
+    st.bar_chart(chart_df)
 
     st.subheader("Overall Interpretation")
     st.write(
@@ -458,8 +541,7 @@ if run_button:
     )
 
     st.subheader("Downloads")
-
-    json_data = json.dumps(results, ensure_ascii=False, indent=2)
+    json_data = json.dumps(df.to_dict(orient="records"), ensure_ascii=False, indent=2)
     st.download_button(
         label="Download Metrics JSON",
         data=json_data,
@@ -467,9 +549,9 @@ if run_button:
         mime="application/json"
     )
 
-    if model_choice == "Compare All" and len(outputs_for_pdf) == 3:
+    if len(st.session_state.outputs_for_pdf) == 3:
         pdf_path = "agentic_comparison_report.pdf"
-        create_pdf_report(outputs_for_pdf, task, pdf_path)
+        create_pdf_report(st.session_state.outputs_for_pdf, task, pdf_path)
 
         with open(pdf_path, "rb") as f:
             st.download_button(
@@ -479,6 +561,63 @@ if run_button:
                 mime="application/pdf"
             )
 
-    st.subheader("Prompt History")
-    for i, item in enumerate(reversed(st.session_state.history[-5:]), start=1):
-        st.write(f"{i}. {item}")
+# ---------------------------
+# Continue with selected agent
+# ---------------------------
+st.subheader("Continue with Selected Agent")
+
+available_agents = [
+    agent_name
+    for agent_name, history in st.session_state.agent_histories.items()
+    if len(history) > 0
+]
+
+if available_agents:
+    selected_agent = st.radio(
+        "Choose an agent to continue with",
+        available_agents,
+        index=available_agents.index(st.session_state.selected_agent) if st.session_state.selected_agent in available_agents else 0,
+        horizontal=True
+    )
+    st.session_state.selected_agent = selected_agent
+
+    hist_col, action_col = st.columns([4, 1])
+
+    with hist_col:
+        st.markdown(f"### Active Agent: {selected_agent}")
+
+    with action_col:
+        if st.button("Clear Conversation"):
+            st.session_state.agent_histories[selected_agent] = []
+            st.rerun()
+
+    history = st.session_state.agent_histories[selected_agent]
+
+    if history:
+        st.markdown("### Chat History")
+        for idx, turn in enumerate(history, start=1):
+            with st.expander(f"Turn {idx}", expanded=False):
+                st.markdown(f"**User:** {turn['user']}")
+                st.markdown(f"**Agent:** {turn['assistant']}")
+
+    follow_up = st.text_input("Send a follow-up message to the selected agent")
+
+    if st.button("Continue Conversation"):
+        if follow_up.strip():
+            llm = OpenAILLM(model="gpt-4.1-mini")
+            with st.spinner(f"Continuing with {selected_agent}..."):
+                out, elapsed = continue_with_agent(llm, selected_agent, follow_up)
+
+            st.success(f"{selected_agent} answered in {elapsed} ms")
+            st.markdown("### Latest Response")
+            st.write(out.final_text)
+            st.rerun()
+else:
+    st.info("Run a comparison first. Then you can select one agent and continue the conversation with it.")
+
+# ---------------------------
+# Prompt history
+# ---------------------------
+st.subheader("Prompt History")
+for i, item in enumerate(reversed(st.session_state.history[-5:]), start=1):
+    st.write(f"{i}. {item}")
