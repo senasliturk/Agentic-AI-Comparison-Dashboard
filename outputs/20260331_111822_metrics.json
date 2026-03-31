@@ -1,0 +1,18 @@
+{
+  "task": "Create a 7-day study plan for a midterm covering API design and requirements engineering.",
+  "reflective": {
+    "elapsed_ms": 37573,
+    "output_chars": 5025,
+    "llm_calls": 3
+  },
+  "multi_agent": {
+    "elapsed_ms": 45538,
+    "output_chars": 6611,
+    "llm_calls": 3
+  },
+  "tree_of_thoughts": {
+    "elapsed_ms": 30955,
+    "output_chars": 1132,
+    "llm_calls": 4
+  }
+}
