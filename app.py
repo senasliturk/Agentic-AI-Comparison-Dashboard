@@ -464,15 +464,21 @@ if st.session_state.last_results:
 
     if "Reflective" in st.session_state.last_results:
         with st.expander("Reflective Output", expanded=False):
+            if st.button("Use Reflective as Final"):
+                st.session_state.final_answer = st.session_state.last_results["Reflective"]
             st.write(st.session_state.last_results["Reflective"])
 
     if "Multi-Agent" in st.session_state.last_results:
         with st.expander("Multi-Agent Output", expanded=False):
             st.write(st.session_state.last_results["Multi-Agent"])
+            if st.button("Use Multi-Agent as Final"):
+                st.session_state.final_answer = st.session_state.last_results["Multi-Agent"]
 
     if "Tree-of-Thoughts" in st.session_state.last_results:
         with st.expander("Tree-of-Thoughts Output", expanded=False):
             st.write(st.session_state.last_results["Tree-of-Thoughts"])
+            if st.button("Use Tree-of-Thoughts as Final"):
+                st.session_state.final_answer = st.session_state.last_results["Tree-of-Thoughts"]
 
 if st.session_state.comparison_df is not None and not st.session_state.comparison_df.empty:
     df = st.session_state.comparison_df
@@ -564,57 +570,44 @@ if st.session_state.comparison_df is not None and not st.session_state.compariso
 # ---------------------------
 # Continue with selected agent
 # ---------------------------
-st.subheader("Continue with Selected Agent")
+st.subheader("Agent Conversations")
 
-available_agents = [
-    agent_name
-    for agent_name, history in st.session_state.agent_histories.items()
-    if len(history) > 0
-]
+tabs = st.tabs(["Reflective", "Multi-Agent", "Tree-of-Thoughts"])
 
-if available_agents:
-    selected_agent = st.radio(
-        "Choose an agent to continue with",
-        available_agents,
-        index=available_agents.index(st.session_state.selected_agent) if st.session_state.selected_agent in available_agents else 0,
-        horizontal=True
-    )
-    st.session_state.selected_agent = selected_agent
+for i, agent_name in enumerate(["Reflective", "Multi-Agent", "Tree-of-Thoughts"]):
+    with tabs[i]:
+        history = st.session_state.agent_histories[agent_name]
 
-    hist_col, action_col = st.columns([4, 1])
+        st.markdown(f"### {agent_name} Chat")
 
-    with hist_col:
-        st.markdown(f"### Active Agent: {selected_agent}")
+        if not history:
+            st.info(f"{agent_name} için henüz konuşma yok.")
+        else:
+            for idx, turn in enumerate(history, start=1):
+                with st.chat_message("user"):
+                    st.write(turn["user"])
 
-    with action_col:
-        if st.button("Clear Conversation"):
-            st.session_state.agent_histories[selected_agent] = []
-            st.rerun()
+                with st.chat_message("assistant"):
+                    assistant_text = turn["assistant"]
 
-    history = st.session_state.agent_histories[selected_agent]
+                    preview_limit = 300
+                    if len(assistant_text) > preview_limit:
+                        st.write(assistant_text[:preview_limit] + "...")
+                        with st.expander("Devamını gör"):
+                            st.write(assistant_text)
+                    else:
+                        st.write(assistant_text)
 
-    if history:
-        st.markdown("### Chat History")
-        for idx, turn in enumerate(history, start=1):
-            with st.expander(f"Turn {idx}", expanded=False):
-                st.markdown(f"**User:** {turn['user']}")
-                st.markdown(f"**Agent:** {turn['assistant']}")
+        msg = st.chat_input(f"{agent_name} ile konuşmaya devam et", key=f"chat_{agent_name}")
 
-    follow_up = st.text_input("Send a follow-up message to the selected agent")
-
-    if st.button("Continue Conversation"):
-        if follow_up.strip():
+        if msg:
             llm = OpenAILLM(model="gpt-4.1-mini")
-            with st.spinner(f"Continuing with {selected_agent}..."):
-                out, elapsed = continue_with_agent(llm, selected_agent, follow_up)
-
-            st.success(f"{selected_agent} answered in {elapsed} ms")
-            st.markdown("### Latest Response")
-            st.write(out.final_text)
+            out, elapsed = continue_with_agent(llm, agent_name, msg)
+            st.success(f"{agent_name} {elapsed} ms içinde yanıt verdi.")
             st.rerun()
-else:
-    st.info("Run a comparison first. Then you can select one agent and continue the conversation with it.")
-
+        if "final_answer" in st.session_state:
+            st.subheader("Final Selected Answer")
+            st.write(st.session_state.final_answer)            
 # ---------------------------
 # Prompt history
 # ---------------------------
